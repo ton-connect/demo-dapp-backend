@@ -11,14 +11,15 @@ var Config = struct {
 }{}
 
 var Tonapi = struct {
-	URI             string `env:"TONAPI_URI" envDefault:"https://tonapi.io"`
+	MainNetURI      string `env:"TONAPI_URI" envDefault:"https://tonapi.io"`
+	TestNetURI      string `env:"TONAPI_URI" envDefault:"https://testnet.tonapi.io"`
 	ServerSideToken string `env:"TONAPI_TOKEN"`
 }{}
 
 var Proof = struct {
 	PayloadLifeTimeSec int64  `env:"TONPROOF_PAYLOAD_LIFETIME_SEC" envDefault:"300"`
 	ProofLifeTimeSec   int64  `env:"TONPROOF_PROOF_LIFETIME_SEC" envDefault:"300"`
-	ExampleDomin       string `env:"TONPROOF_EXAMPLE_DOMAIN" envDefault:"example.dapp"`
+	ExampleDomain      string `env:"TONPROOF_EXAMPLE_DOMAIN" envDefault:"ton-connect.github.io"`
 }{}
 
 func LoadConfig() {

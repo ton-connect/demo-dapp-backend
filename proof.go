@@ -5,10 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -16,7 +12,6 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/tonkeeper/tonproof/config"
@@ -26,65 +21,13 @@ import (
 const (
 	tonProofPrefix   = "ton-proof-item-v2/"
 	tonConnectPrefix = "ton-connect"
-	GetWalletPath    = "/v1/wallet/getWalletPublicKey"
 )
-
-func GetWalletPubKey(ctx context.Context, address string) (ed25519.PublicKey, error) {
-	log := log.WithContext(ctx).WithField("prefix", "GetWalletPubKey")
-	u, err := url.Parse(config.Tonapi.URI)
-	if err != nil {
-		log.Fatal(err)
-	}
-	u.Path = path.Join(u.Path, GetWalletPath)
-	GetWalletUrl := u.String()
-	req, err := http.NewRequest(http.MethodGet, GetWalletUrl, nil)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-
-	q := req.URL.Query()
-	q.Add("account", address)
-	req.URL.RawQuery = q.Encode()
-
-	req.Header.Add("Authorization", "Bearer "+config.Tonapi.ServerSideToken)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Errorf("Error on response: %v", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	res, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Errorf("Read body error: %v", err)
-		return nil, err
-	}
-
-	var pubKeyResponse struct {
-		PublicKey string `json:"publicKey"`
-	}
-
-	err = json.Unmarshal(res, &pubKeyResponse)
-	if err != nil {
-		log.Errorf("unmarshal error: %v", err)
-		return nil, err
-	}
-	d, err := hex.DecodeString(pubKeyResponse.PublicKey)
-	if err != nil {
-		log.Errorf("decode error: %v", err)
-		return nil, err
-	}
-	return ed25519.PublicKey(d), nil
-}
 
 func SignatureVerify(pubkey ed25519.PublicKey, message, signture []byte) bool {
 	return ed25519.Verify(pubkey, message, signture)
 }
 
-func ConverTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*datatype.ParsedMessage, error) {
+func ConvertTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*datatype.ParsedMessage, error) {
 	log := log.WithContext(ctx).WithField("prefix", "ConverTonProofMessage")
 
 	addr := strings.Split(tp.Address, ":")
@@ -101,12 +44,6 @@ func ConverTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*datatyp
 	}
 
 	walletAddr, err := hex.DecodeString(addr[1])
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-
-	domain, err := base64.URLEncoding.DecodeString(tp.Proof.Domain)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -132,7 +69,7 @@ func ConverTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*datatyp
 
 	parsedMessage.Workchain = int32(workchain)
 	parsedMessage.Address = walletAddr
-	parsedMessage.Domain = string(domain)
+	parsedMessage.Domain = tp.Proof.Domain
 	parsedMessage.Timstamp = int64(timestamp)
 	parsedMessage.Signature = sig
 	parsedMessage.Payload = tp.Proof.Payload
@@ -147,10 +84,13 @@ func CreateMessage(ctx context.Context, message *datatype.ParsedMessage) ([]byte
 	ts := make([]byte, 8)
 	binary.LittleEndian.PutUint64(ts, uint64(message.Timstamp))
 
+	dl := make([]byte, 4)
+	binary.LittleEndian.PutUint32(wc, uint32(message.Domain.LengthBytes))
 	m := []byte(tonConnectPrefix)
 	m = append(m, wc...)
 	m = append(m, message.Address...)
-	m = append(m, []byte(message.Domain)...)
+	m = append(m, dl...)
+	m = append(m, []byte(message.Domain.Value)...)
 	m = append(m, ts...)
 	m = append(m, []byte(message.Payload)...)
 
@@ -162,9 +102,9 @@ func CreateMessage(ctx context.Context, message *datatype.ParsedMessage) ([]byte
 	return res[:], nil
 }
 
-func CheckProof(ctx context.Context, address string, tonProofReq *datatype.ParsedMessage) (bool, error) {
+func CheckProof(ctx context.Context, address, net string, tonProofReq *datatype.ParsedMessage) (bool, error) {
 	log := log.WithContext(ctx).WithField("prefix", "CheckProof")
-	pubKey, err := GetWalletPubKey(ctx, address)
+	pubKey, err := GetWalletPubKey(ctx, address, net)
 	if err != nil {
 		log.Errorf("get wallet address error: %v", err)
 		return false, err
@@ -176,7 +116,7 @@ func CheckProof(ctx context.Context, address string, tonProofReq *datatype.Parse
 		return false, fmt.Errorf(msgErr)
 	}
 
-	if tonProofReq.Domain != config.Proof.ExampleDomin {
+	if tonProofReq.Domain.Value != config.Proof.ExampleDomain {
 		msgErr := fmt.Sprintf("wrong domain: %v", tonProofReq.Domain)
 		log.Error(msgErr)
 		return false, fmt.Errorf(msgErr)
