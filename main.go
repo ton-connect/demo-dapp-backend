@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/ed25519"
 	"fmt"
 
 	"github.com/tonkeeper/tonproof/config"
@@ -23,7 +24,14 @@ func main() {
 		DisablePrintStack: false,
 	}))
 	e.Use(middleware.Logger())
-	h := newHandler()
+
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		log.Fatalf("generate keys error: %v", err)
+		return
+	}
+
+	h := newHandler(pub, priv)
 
 	registerHandlers(e, h)
 

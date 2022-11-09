@@ -31,7 +31,7 @@ func TestSignVerify(t *testing.T) {
 
 	t.Log("signing message")
 	signature := ed25519.Sign(priv, hash)
-	t.Logf("signature: %v", signature)
+	t.Logf("signature: %v", base64.URLEncoding.EncodeToString(signature))
 
 	t.Log("checking message")
 	check := SignatureVerify(pub, hash, signature)

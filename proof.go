@@ -11,6 +11,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"encoding/base64"
 	"encoding/binary"
@@ -83,13 +84,15 @@ func SignatureVerify(pubkey ed25519.PublicKey, message, signture []byte) bool {
 	return ed25519.Verify(pubkey, message, signture)
 }
 
-func CreateMessage(ctx context.Context, address string, message datatype.MessageInfo) ([]byte, error) {
-	log := log.WithContext(ctx).WithField("prefix", "CreateMessage")
+func ConverTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*datatype.ParsedMessage, error) {
+	log := log.WithContext(ctx).WithField("prefix", "ConverTonProofMessage")
 
-	addr := strings.Split(address, ":")
+	addr := strings.Split(tp.Address, ":")
 	if len(addr) != 2 {
-		return nil, fmt.Errorf("invalid address param: %v", address)
+		return nil, fmt.Errorf("invalid address param: %v", tp.Address)
 	}
+
+	var parsedMessage datatype.ParsedMessage
 
 	workchain, err := strconv.ParseInt(addr[0], 10, 32)
 	if err != nil {
@@ -97,29 +100,29 @@ func CreateMessage(ctx context.Context, address string, message datatype.Message
 		return nil, err
 	}
 
-	wc := make([]byte, 4)
-	binary.LittleEndian.PutUint32(wc, uint32(workchain))
-
 	walletAddr, err := hex.DecodeString(addr[1])
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
-	domain, err := base64.URLEncoding.DecodeString(message.Domain)
+	domain, err := base64.URLEncoding.DecodeString(tp.Proof.Domain)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
-	timestamp, err := strconv.ParseUint(message.Timestamp, 10, 64)
+	timestamp, err := strconv.ParseUint(tp.Proof.Timestamp, 10, 64)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
-	ts := make([]byte, 8)
-	binary.LittleEndian.PutUint64(ts, timestamp)
+	sig, err := base64.URLEncoding.DecodeString(tp.Proof.Signature)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
 
 	// payload, err := base64.URLEncoding.DecodeString(message.Payload)
 	// if err != nil {
@@ -127,10 +130,28 @@ func CreateMessage(ctx context.Context, address string, message datatype.Message
 	// 	return nil, err
 	// }
 
+	parsedMessage.Workchain = int32(workchain)
+	parsedMessage.Address = walletAddr
+	parsedMessage.Domain = string(domain)
+	parsedMessage.Timstamp = int64(timestamp)
+	parsedMessage.Signature = sig
+	parsedMessage.Payload = tp.Proof.Payload
+	return &parsedMessage, nil
+}
+
+func CreateMessage(ctx context.Context, message *datatype.ParsedMessage) ([]byte, error) {
+	// log := log.WithContext(ctx).WithField("prefix", "CreateMessage")
+
+	wc := make([]byte, 4)
+	binary.LittleEndian.PutUint32(wc, uint32(message.Workchain))
+
+	ts := make([]byte, 8)
+	binary.LittleEndian.PutUint64(ts, uint64(message.Timstamp))
+
 	m := []byte(tonConnectPrefix)
 	m = append(m, wc...)
-	m = append(m, walletAddr...)
-	m = append(m, domain...)
+	m = append(m, message.Address...)
+	m = append(m, []byte(message.Domain)...)
 	m = append(m, ts...)
 	m = append(m, []byte(message.Payload)...)
 
@@ -142,24 +163,31 @@ func CreateMessage(ctx context.Context, address string, message datatype.Message
 	return res[:], nil
 }
 
-func CheckProof(ctx context.Context, tonProofReq datatype.TonProof) (bool, error) {
+func CheckProof(ctx context.Context, address string, tonProofReq *datatype.ParsedMessage) (bool, error) {
 	log := log.WithContext(ctx).WithField("prefix", "CheckProof")
-	pubKey, err := GetWalletPubKey(ctx, tonProofReq.Address)
+	pubKey, err := GetWalletPubKey(ctx, address)
 	if err != nil {
 		log.Errorf("get wallet address error: %v", err)
 		return false, err
 	}
-	mes, err := CreateMessage(ctx, tonProofReq.Address, tonProofReq.Proof)
+
+	if time.Now().After(time.Unix(tonProofReq.Timstamp, 0).Add(time.Duration(config.Proof.ProofLifeTimeSec) * time.Second)) {
+		msgErr := "proof has been expired"
+		log.Error(msgErr)
+		return false, fmt.Errorf(msgErr)
+	}
+
+	if tonProofReq.Domain != config.Proof.ExampleDomin {
+		msgErr := fmt.Sprintf("wrong domain: %v", tonProofReq)
+		log.Error(msgErr)
+		return false, fmt.Errorf(msgErr)
+	}
+
+	mes, err := CreateMessage(ctx, tonProofReq)
 	if err != nil {
 		log.Errorf("create message error: %v", err)
 		return false, err
 	}
 
-	sig, err := base64.URLEncoding.DecodeString(tonProofReq.Proof.Signature)
-	if err != nil {
-		log.Error(err)
-		return false, err
-	}
-
-	return SignatureVerify(pubKey, mes, sig), nil
+	return SignatureVerify(pubKey, mes, tonProofReq.Signature), nil
 }
