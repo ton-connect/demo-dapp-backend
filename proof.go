@@ -141,7 +141,6 @@ func ConverTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*datatyp
 
 func CreateMessage(ctx context.Context, message *datatype.ParsedMessage) ([]byte, error) {
 	// log := log.WithContext(ctx).WithField("prefix", "CreateMessage")
-
 	wc := make([]byte, 4)
 	binary.LittleEndian.PutUint32(wc, uint32(message.Workchain))
 
@@ -178,7 +177,7 @@ func CheckProof(ctx context.Context, address string, tonProofReq *datatype.Parse
 	}
 
 	if tonProofReq.Domain != config.Proof.ExampleDomin {
-		msgErr := fmt.Sprintf("wrong domain: %v", tonProofReq)
+		msgErr := fmt.Sprintf("wrong domain: %v", tonProofReq.Domain)
 		log.Error(msgErr)
 		return false, fmt.Errorf(msgErr)
 	}

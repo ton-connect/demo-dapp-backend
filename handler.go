@@ -21,14 +21,16 @@ type jwtCustomClaims struct {
 }
 
 type handler struct {
-	pub  ed25519.PublicKey
-	priv ed25519.PrivateKey
+	pub     ed25519.PublicKey
+	priv    ed25519.PrivateKey
+	payload map[string]int64
 }
 
 func newHandler(pub ed25519.PublicKey, priv ed25519.PrivateKey) *handler {
 	h := handler{
-		pub:  pub,
-		priv: priv,
+		pub:     pub,
+		priv:    priv,
+		payload: make(map[string]int64),
 	}
 
 	return &h
@@ -39,57 +41,46 @@ func (h *handler) ProofHandler(c echo.Context) error {
 	log := log.WithContext(ctx).WithField("prefix", "ProofHandler")
 	b, err := io.ReadAll(c.Request().Body)
 	if err != nil {
-		log.Error(err)
-		return c.JSON(HttpResError(err.Error(), http.StatusBadRequest))
+		return c.JSON(HttpResErrorWithLog(err.Error(), http.StatusBadRequest, log))
 	}
 	var tp datatype.TonProof
 	err = json.Unmarshal(b, &tp)
 	if err != nil {
-		log.Error(err)
-		return c.JSON(HttpResError(err.Error(), http.StatusBadRequest))
+		return c.JSON(HttpResErrorWithLog(err.Error(), http.StatusBadRequest, log))
 	}
 
 	// check payload
 	pc, err := c.Cookie("payload")
 	if err != nil && err != http.ErrNoCookie {
-		log.Error(err)
-		c.JSON(HttpResError(err.Error(), http.StatusBadRequest))
+		return c.JSON(HttpResErrorWithLog(err.Error(), http.StatusBadRequest, log))
 	}
 	if err != http.ErrNoCookie {
-		if !pc.Expires.IsZero() {
-			if time.Now().After(pc.Expires) {
-				msgErr := "payload has been expired"
-				log.Error(msgErr)
-				return c.JSON(HttpResError(msgErr, http.StatusBadRequest))
-			}
+		endTime, ok := h.payload[pc.Value]
+		if !ok {
+			return c.JSON(HttpResErrorWithLog("invalid or expired payload", http.StatusBadRequest, log))
+		}
+		if (time.Now().Unix() > endTime) || (!pc.Expires.IsZero() && time.Now().After(pc.Expires)) {
+			return c.JSON(HttpResErrorWithLog("payload has been expired", http.StatusBadRequest, log))
 		}
 		sign, err := base64.RawURLEncoding.DecodeString(pc.Value)
 		if err != nil {
-			msgErr := "can't verify payload signature"
-			log.Errorf("%v: %v", msgErr, err)
-			return c.JSON(HttpResError(msgErr, http.StatusBadRequest))
+			return c.JSON(HttpResErrorWithLog("can't verify payload signature", http.StatusBadRequest, log))
 		}
 		if !ed25519.Verify(h.pub, []byte(tp.Proof.Payload), sign) {
-			msgErr := "payload verification failed"
-			log.Errorf(msgErr)
-			return c.JSON(HttpResError(msgErr, http.StatusBadRequest))
+			return c.JSON(HttpResErrorWithLog("payload verification failed", http.StatusBadRequest, log))
 		}
 	}
 
 	parsed, err := ConverTonProofMessage(ctx, &tp)
 	if err != nil {
-		log.Error(err)
-		return c.JSON(HttpResError(err.Error(), http.StatusBadRequest))
+		return c.JSON(HttpResErrorWithLog(err.Error(), http.StatusBadRequest, log))
 	}
 	check, err := CheckProof(ctx, tp.Address, parsed)
 	if err != nil {
-		log.Error(err)
-		return c.JSON(HttpResError(err.Error(), http.StatusBadRequest))
+		return c.JSON(HttpResErrorWithLog("proof checking error: "+err.Error(), http.StatusBadRequest, log))
 	}
 	if !check {
-		msgErr := "proof verification failed"
-		log.Errorf(msgErr)
-		// return c.JSON(HttpResError(msgErr, http.StatusBadRequest))
+		// 	return c.JSON(HttpResErrorWithLog("proof verification failed", http.StatusBadRequest, log))
 	}
 
 	claims := &jwtCustomClaims{
@@ -117,11 +108,11 @@ func (h *handler) PayloadHandler(c echo.Context) error {
 
 	nonce, err := GenerateNonce()
 	if err != nil {
-		log.Error(err)
-		c.JSON(HttpResError(err.Error(), http.StatusBadRequest))
+		c.JSON(HttpResErrorWithLog(err.Error(), http.StatusBadRequest, log))
 	}
 	endTime := time.Now().Add(time.Duration(config.Proof.PayloadLifeTimeSec) * time.Second)
 	sign := base64.RawURLEncoding.EncodeToString(ed25519.Sign(h.priv, []byte(nonce)))
+	h.payload[sign] = endTime.Unix()
 	c.SetCookie(&http.Cookie{
 		Name:    "payload",
 		Value:   sign,
