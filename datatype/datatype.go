@@ -6,7 +6,7 @@ type Domain struct {
 }
 
 type MessageInfo struct {
-	Timestamp string `json:"timestamp"`
+	Timestamp int64  `json:"timestamp"`
 	Domain    Domain `json:"domain"`
 	Signature string `json:"signature"`
 	Payload   string `json:"payload"`

@@ -23,8 +23,8 @@ const (
 	tonConnectPrefix = "ton-connect"
 )
 
-func SignatureVerify(pubkey ed25519.PublicKey, message, signture []byte) bool {
-	return ed25519.Verify(pubkey, message, signture)
+func SignatureVerify(pubkey ed25519.PublicKey, message, signature []byte) bool {
+	return ed25519.Verify(pubkey, message, signature)
 }
 
 func ConvertTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*datatype.ParsedMessage, error) {
@@ -49,56 +49,44 @@ func ConvertTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*dataty
 		return nil, err
 	}
 
-	timestamp, err := strconv.ParseUint(tp.Proof.Timestamp, 10, 64)
+	sig, err := base64.StdEncoding.DecodeString(tp.Proof.Signature)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
-
-	sig, err := base64.URLEncoding.DecodeString(tp.Proof.Signature)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-
-	// payload, err := base64.URLEncoding.DecodeString(message.Payload)
-	// if err != nil {
-	// 	log.Error(err)
-	// 	return nil, err
-	// }
 
 	parsedMessage.Workchain = int32(workchain)
 	parsedMessage.Address = walletAddr
 	parsedMessage.Domain = tp.Proof.Domain
-	parsedMessage.Timstamp = int64(timestamp)
+	parsedMessage.Timstamp = tp.Proof.Timestamp
 	parsedMessage.Signature = sig
 	parsedMessage.Payload = tp.Proof.Payload
 	return &parsedMessage, nil
 }
 
 func CreateMessage(ctx context.Context, message *datatype.ParsedMessage) ([]byte, error) {
-	// log := log.WithContext(ctx).WithField("prefix", "CreateMessage")
 	wc := make([]byte, 4)
-	binary.LittleEndian.PutUint32(wc, uint32(message.Workchain))
+	binary.BigEndian.PutUint32(wc, uint32(message.Workchain))
 
 	ts := make([]byte, 8)
 	binary.LittleEndian.PutUint64(ts, uint64(message.Timstamp))
 
 	dl := make([]byte, 4)
-	binary.LittleEndian.PutUint32(wc, uint32(message.Domain.LengthBytes))
-	m := []byte(tonConnectPrefix)
+	binary.LittleEndian.PutUint32(dl, message.Domain.LengthBytes)
+	m := []byte(tonProofPrefix)
 	m = append(m, wc...)
 	m = append(m, message.Address...)
 	m = append(m, dl...)
 	m = append(m, []byte(message.Domain.Value)...)
 	m = append(m, ts...)
 	m = append(m, []byte(message.Payload)...)
-
+	log.Info(string(m))
 	messageHash := sha256.Sum256(m)
 	fullMes := []byte{0xff, 0xff}
 	fullMes = append(fullMes, []byte(tonConnectPrefix)...)
 	fullMes = append(fullMes, messageHash[:]...)
 	res := sha256.Sum256(fullMes)
+	log.Info(hex.EncodeToString(res[:]))
 	return res[:], nil
 }
 
