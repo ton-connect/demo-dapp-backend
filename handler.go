@@ -139,7 +139,9 @@ func (h *handler) PayloadHandler(c echo.Context) error {
 		Signature:     sign,
 	}
 	h.mux.Unlock()
-	return c.JSON(http.StatusOK, nonce)
+	return c.JSON(http.StatusOK, echo.Map{
+		"payload": nonce,
+	})
 
 }
 

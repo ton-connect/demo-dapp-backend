@@ -11,8 +11,8 @@ var Config = struct {
 }{}
 
 var Tonapi = struct {
-	MainNetURI      string `env:"TONAPI_URI" envDefault:"https://tonapi.io"`
-	TestNetURI      string `env:"TONAPI_URI" envDefault:"https://testnet.tonapi.io"`
+	MainNetURI      string `env:"TONAPI_MAINNET_URI" envDefault:"https://tonapi.io"`
+	TestNetURI      string `env:"TONAPI_TESTNET_URI" envDefault:"https://testnet.tonapi.io"`
 	ServerSideToken string `env:"TONAPI_TOKEN"`
 }{}
 
