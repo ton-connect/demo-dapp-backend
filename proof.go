@@ -61,6 +61,7 @@ func ConvertTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*dataty
 	parsedMessage.Timstamp = tp.Proof.Timestamp
 	parsedMessage.Signature = sig
 	parsedMessage.Payload = tp.Proof.Payload
+	parsedMessage.StateInit = tp.Proof.StateInit
 	return &parsedMessage, nil
 }
 
@@ -94,8 +95,16 @@ func CheckProof(ctx context.Context, address, net string, tonProofReq *datatype.
 	log := log.WithContext(ctx).WithField("prefix", "CheckProof")
 	pubKey, err := GetWalletPubKey(ctx, address, net)
 	if err != nil {
-		log.Errorf("get wallet address error: %v", err)
-		return false, err
+		if tonProofReq.StateInit == "" {
+			log.Errorf("get wallet address error: %v", err)
+			return false, err
+		}
+
+		pubKey, err = ParseStateInit(tonProofReq.StateInit)
+		if err != nil {
+			log.Errorf("get wallet address error: %v", err)
+			return false, err
+		}
 	}
 
 	if time.Now().After(time.Unix(tonProofReq.Timstamp, 0).Add(time.Duration(config.Proof.ProofLifeTimeSec) * time.Second)) {
