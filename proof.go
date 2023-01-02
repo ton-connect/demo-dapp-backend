@@ -102,7 +102,6 @@ func CheckProof(ctx context.Context, address, net string, tonProofReq *datatype.
 
 		pubKey, err = ParseStateInit(tonProofReq.StateInit)
 		if err != nil {
-			log.Errorf("get wallet address error: %v", err)
 			return false, err
 		}
 	}
