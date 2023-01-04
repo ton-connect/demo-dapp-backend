@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/ed25519"
 	"encoding/hex"
-	log "github.com/sirupsen/logrus"
 	"github.com/startfellows/tongo"
 	"github.com/startfellows/tongo/boc"
 	"github.com/startfellows/tongo/tlb"
@@ -22,27 +21,22 @@ func init() {
 func ParseStateInit(stateInit string) ([]byte, error) {
 	cells, err := boc.DeserializeBocBase64(stateInit)
 	if err != nil || len(cells) != 1 {
-		log.Errorf("failed to deserialize boc: %v", err)
 		return nil, err
 	}
 	var state tongo.StateInit
 	err = tlb.Unmarshal(cells[0], &state)
 	if err != nil {
-		log.Errorf("failed to unmarshal: %v", err)
 		return nil, err
 	}
 	if state.Data.Null || state.Code.Null {
-		log.Errorf("empty state: %v", err)
 		return nil, err
 	}
 	hash, err := state.Code.Value.Value.HashString()
 	if err != nil {
-		log.Errorf("failed to convert hash: %v", err)
 		return nil, err
 	}
 	version, prs := knownHashes[hash]
 	if !prs {
-		log.Errorf("unknow hash: %v", hash)
 		return nil, err
 	}
 	var pubKey tongo.Hash
@@ -51,7 +45,6 @@ func ParseStateInit(stateInit string) ([]byte, error) {
 		var data wallet.DataV1V2
 		err = tlb.Unmarshal(&state.Data.Value.Value, &data)
 		if err != nil {
-			log.Errorf("failed to unmarshal: %v", err)
 			return nil, err
 		}
 		pubKey = data.PublicKey
@@ -59,7 +52,6 @@ func ParseStateInit(stateInit string) ([]byte, error) {
 		var data wallet.DataV3
 		err = tlb.Unmarshal(&state.Data.Value.Value, &data)
 		if err != nil {
-			log.Errorf("failed to unmarshal: %v", err)
 			return nil, err
 		}
 		pubKey = data.PublicKey
