@@ -10,6 +10,7 @@ type MessageInfo struct {
 	Domain    Domain `json:"domain"`
 	Signature string `json:"signature"`
 	Payload   string `json:"payload"`
+	StateInit string `json:"state_init"`
 }
 
 type TonProof struct {
@@ -25,6 +26,7 @@ type ParsedMessage struct {
 	Domain    Domain
 	Signature []byte
 	Payload   string
+	StateInit string
 }
 
 type Payload struct {
