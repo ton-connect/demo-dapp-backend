@@ -48,3 +48,6 @@ Bearer <token>
 response:
 json
 ```
+
+# Ton Proof JS verification
+You can find an example of the ton_proof verification in JavaScript [here](https://gist.github.com/TrueCarry/cac00bfae051f7028085aa018c2a05c6).
