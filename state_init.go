@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/ed25519"
 	"encoding/hex"
 	"github.com/startfellows/tongo"
 	"github.com/startfellows/tongo/boc"
@@ -57,5 +56,5 @@ func ParseStateInit(stateInit string) ([]byte, error) {
 		pubKey = data.PublicKey
 	}
 
-	return ed25519.PublicKey(pubKey.Hex()), nil
+	return pubKey[:], nil
 }

@@ -3,13 +3,10 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"path"
-
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"net/http"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/tonkeeper/tonproof/config"
@@ -23,80 +20,61 @@ const (
 
 func GetAccountInfo(ctx context.Context, address string, net string) (*datatype.AccountInfo, error) {
 	log := log.WithContext(ctx).WithField("prefix", "GetAccountInfo")
-	u, err := url.Parse(net)
+
+	url := net + GetAccountInfoPath + fmt.Sprintf("?account=%v", address)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		log.Fatal(err)
-	}
-	u.Path = path.Join(u.Path, GetAccountInfoPath)
-	GetAccountInfoUrl := u.String()
-	req, err := http.NewRequest(http.MethodGet, GetAccountInfoUrl, nil)
-	if err != nil {
-		log.Error(err)
+		log.Errorf("failed to send request to get wallet pub key: %v", err)
 		return nil, err
 	}
 
-	q := req.URL.Query()
-	q.Add("account", address)
-	req.URL.RawQuery = q.Encode()
-
-	req.Header.Add("Authorization", "Bearer "+config.Tonapi.ServerSideToken)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	req.Header.Add("Authorization", "Bearer "+config.Tonapi.Token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Errorf("Error on response: %v", err)
+		log.Errorf("failed to send request to get wallet pub key: %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	res, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Errorf("Read body error: %v", err)
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("can't get info about wallet pub key")
+		log.Errorf("%v. Status code: %v", err, resp.StatusCode)
 		return nil, err
 	}
 
-	var accInfo datatype.AccountInfo
-
-	err = json.Unmarshal(res, &accInfo)
+	var accountInfo datatype.AccountInfo
+	err = json.NewDecoder(resp.Body).Decode(&accountInfo)
 	if err != nil {
-		log.Errorf("unmarshal error: %v", err)
+		log.Errorf("failed to decode body: %v", err)
 		return nil, err
 	}
 
-	return &accInfo, nil
+	return &accountInfo, nil
 }
 
 func GetWalletPubKey(ctx context.Context, address string, net string) (ed25519.PublicKey, error) {
 	log := log.WithContext(ctx).WithField("prefix", "GetWalletPubKey")
-	u, err := url.Parse(net)
+
+	url := net + GetWalletPath + fmt.Sprintf("?account=%v", address)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		log.Fatal(err)
-	}
-	u.Path = path.Join(u.Path, GetWalletPath)
-	GetWalletUrl := u.String()
-	req, err := http.NewRequest(http.MethodGet, GetWalletUrl, nil)
-	if err != nil {
-		log.Error(err)
+		log.Errorf("failed to send request to get wallet pub key: %v", err)
 		return nil, err
 	}
 
-	q := req.URL.Query()
-	q.Add("account", address)
-	req.URL.RawQuery = q.Encode()
-
-	req.Header.Add("Authorization", "Bearer "+config.Tonapi.ServerSideToken)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	req.Header.Add("Authorization", "Bearer "+config.Tonapi.Token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Errorf("Error on response: %v", err)
+		log.Errorf("failed to send request to get wallet pub key: %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	res, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Errorf("Read body error: %v", err)
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("can't get info about wallet pub key")
+		log.Errorf("%v. Status code: %v", err, resp.StatusCode)
 		return nil, err
 	}
 
@@ -104,15 +82,17 @@ func GetWalletPubKey(ctx context.Context, address string, net string) (ed25519.P
 		PublicKey string `json:"publicKey"`
 	}
 
-	err = json.Unmarshal(res, &pubKeyResponse)
+	err = json.NewDecoder(resp.Body).Decode(&pubKeyResponse)
 	if err != nil {
-		log.Errorf("unmarshal error: %v", err)
+		log.Errorf("failed to decode body: %v", err)
 		return nil, err
 	}
-	d, err := hex.DecodeString(pubKeyResponse.PublicKey)
+
+	publicKey, err := hex.DecodeString(pubKeyResponse.PublicKey)
 	if err != nil {
-		log.Errorf("decode error: %v", err)
+		log.Errorf("failed to decode hex: %v", err)
 		return nil, err
 	}
-	return ed25519.PublicKey(d), nil
+
+	return publicKey, nil
 }
