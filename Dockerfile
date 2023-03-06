@@ -1,4 +1,4 @@
-FROM golang:1.18 AS gobuild
+FROM golang:1.20 AS gobuild
 WORKDIR /build-dir
 COPY go.mod .
 COPY go.sum .
@@ -7,7 +7,7 @@ COPY . .
 RUN go build -o /tmp/tonproof github.com/tonkeeper/tonproof
 
 
-FROM golang:1.17 AS tonproof
+FROM ubuntu AS tonproof
 COPY --from=gobuild /tmp/tonproof /app/tonproof
 CMD ["/app/tonproof"]
 
