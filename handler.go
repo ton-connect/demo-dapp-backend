@@ -1,19 +1,16 @@
 package main
 
 import (
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/tonkeeper/tongo"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/labstack/echo/v4"
 	log "github.com/sirupsen/logrus"
-	"github.com/tonkeeper/tonproof/config"
 	"github.com/tonkeeper/tonproof/datatype"
 )
 
@@ -23,31 +20,16 @@ type jwtCustomClaims struct {
 }
 
 type handler struct {
-	pub     ed25519.PublicKey
-	priv    ed25519.PrivateKey
-	payload map[string]datatype.Payload
-	mux     sync.RWMutex
+	sharedSecret string
+	payloadTtl   time.Duration
 }
 
-func newHandler(pub ed25519.PublicKey, priv ed25519.PrivateKey) *handler {
+func newHandler(sharedSecret string, payloadTtl time.Duration) *handler {
 	h := handler{
-		pub:     pub,
-		priv:    priv,
-		payload: make(map[string]datatype.Payload),
+		sharedSecret: sharedSecret,
+		payloadTtl:   payloadTtl,
 	}
-	go h.worker()
 	return &h
-}
-
-func (h *handler) worker() {
-	for {
-		<-time.NewTimer(time.Minute).C
-		for k, v := range h.payload {
-			if time.Now().Unix() > v.ExpirtionTime {
-				delete(h.payload, k)
-			}
-		}
-	}
 }
 
 func (h *handler) ProofHandler(c echo.Context) error {
@@ -64,21 +46,9 @@ func (h *handler) ProofHandler(c echo.Context) error {
 	}
 
 	// check payload
-	h.mux.RLock()
-	pl, ok := h.payload[tp.Proof.Payload]
-	h.mux.RUnlock()
-	if !ok {
-		return c.JSON(HttpResErrorWithLog("invalid or expired payload", http.StatusBadRequest, log))
-	}
-	if time.Now().Unix() > pl.ExpirtionTime {
-		return c.JSON(HttpResErrorWithLog("payload has been expired", http.StatusBadRequest, log))
-	}
-	sign, err := base64.RawURLEncoding.DecodeString(pl.Signature)
+	err = checkPayload(tp.Proof.Payload, h.sharedSecret)
 	if err != nil {
-		return c.JSON(HttpResErrorWithLog("can't verify payload signature", http.StatusBadRequest, log))
-	}
-	if !ed25519.Verify(h.pub, []byte(tp.Proof.Payload), sign) {
-		return c.JSON(HttpResErrorWithLog("payload verification failed", http.StatusBadRequest, log))
+		return c.JSON(HttpResErrorWithLog("payload verification failed: "+err.Error(), http.StatusBadRequest, log))
 	}
 
 	parsed, err := ConvertTonProofMessage(ctx, &tp)
@@ -86,17 +56,15 @@ func (h *handler) ProofHandler(c echo.Context) error {
 		return c.JSON(HttpResErrorWithLog(err.Error(), http.StatusBadRequest, log))
 	}
 
-	net := ""
-	switch tp.Network {
-	case "-3": // testnet network
-		net = config.Tonapi.TestNetURI
-	case "-239": // mainnet network
-		net = config.Tonapi.MainNetURI
-	default:
+	net := networks[tp.Network]
+	if net == nil {
 		return c.JSON(HttpResErrorWithLog(fmt.Sprintf("undefined network: %v", tp.Network), http.StatusBadRequest, log))
 	}
-
-	check, err := CheckProof(ctx, tp.Address, net, parsed)
+	addr, err := tongo.ParseAccountID(tp.Address)
+	if net == nil {
+		return c.JSON(HttpResErrorWithLog(fmt.Sprintf("invalid account: %v", tp.Address), http.StatusBadRequest, log))
+	}
+	check, err := CheckProof(ctx, addr, net, parsed)
 	if err != nil {
 		return c.JSON(HttpResErrorWithLog("proof checking error: "+err.Error(), http.StatusBadRequest, log))
 	}
@@ -113,7 +81,7 @@ func (h *handler) ProofHandler(c echo.Context) error {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	t, err := token.SignedString([]byte("secret"))
+	t, err := token.SignedString([]byte(h.sharedSecret))
 	if err != nil {
 		return err
 	}
@@ -124,25 +92,16 @@ func (h *handler) ProofHandler(c echo.Context) error {
 }
 
 func (h *handler) PayloadHandler(c echo.Context) error {
-	ctx := c.Request().Context()
-	log := log.WithContext(ctx).WithField("prefix", "PayloadHandler")
+	log := log.WithContext(c.Request().Context()).WithField("prefix", "PayloadHandler")
 
-	nonce, err := GenerateNonce()
+	payload, err := generatePayload(h.sharedSecret, h.payloadTtl)
 	if err != nil {
 		c.JSON(HttpResErrorWithLog(err.Error(), http.StatusBadRequest, log))
 	}
-	endTime := time.Now().Add(time.Duration(config.Proof.PayloadLifeTimeSec) * time.Second)
-	sign := base64.RawURLEncoding.EncodeToString(ed25519.Sign(h.priv, []byte(nonce)))
-	h.mux.Lock()
-	h.payload[nonce] = datatype.Payload{
-		ExpirtionTime: endTime.Unix(),
-		Signature:     sign,
-	}
-	h.mux.Unlock()
-	return c.JSON(http.StatusOK, echo.Map{
-		"payload": nonce,
-	})
 
+	return c.JSON(http.StatusOK, echo.Map{
+		"payload": payload,
+	})
 }
 
 func (h *handler) GetAccountInfo(c echo.Context) error {
@@ -150,17 +109,14 @@ func (h *handler) GetAccountInfo(c echo.Context) error {
 	log := log.WithContext(ctx).WithField("prefix", "GetAccountInfo")
 	user := c.Get("user").(*jwt.Token)
 	claims := user.Claims.(*jwtCustomClaims)
-	addr := claims.Address
+	addr, err := tongo.ParseAccountID(claims.Address)
+	if err != nil {
+		return c.JSON(HttpResErrorWithLog(fmt.Sprintf("can't parse acccount: %v", claims.Address), http.StatusBadRequest, log))
+	}
 
-	network := c.QueryParam("network")
-	net := ""
-	switch network {
-	case "-3": // testnet network
-		net = config.Tonapi.TestNetURI
-	case "-239": // mainnet network
-		net = config.Tonapi.MainNetURI
-	default:
-		return c.JSON(HttpResErrorWithLog(fmt.Sprintf("undefined network: %v", network), http.StatusBadRequest, log))
+	net := networks[c.QueryParam("network")]
+	if net == nil {
+		return c.JSON(HttpResErrorWithLog(fmt.Sprintf("undefined network: %v", c.QueryParam("network")), http.StatusBadRequest, log))
 	}
 
 	address, err := GetAccountInfo(c.Request().Context(), addr, net)

@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/hex"
-	"github.com/startfellows/tongo"
-	"github.com/startfellows/tongo/boc"
-	"github.com/startfellows/tongo/tlb"
-	"github.com/startfellows/tongo/wallet"
+	"fmt"
+	"github.com/tonkeeper/tongo/boc"
+	"github.com/tonkeeper/tongo/tlb"
+	"github.com/tonkeeper/tongo/wallet"
 )
 
 var knownHashes = make(map[string]wallet.Version)
@@ -22,23 +22,23 @@ func ParseStateInit(stateInit string) ([]byte, error) {
 	if err != nil || len(cells) != 1 {
 		return nil, err
 	}
-	var state tongo.StateInit
+	var state tlb.StateInit
 	err = tlb.Unmarshal(cells[0], &state)
 	if err != nil {
 		return nil, err
 	}
-	if state.Data.Null || state.Code.Null {
-		return nil, err
+	if !state.Data.Exists || !state.Code.Exists {
+		return nil, fmt.Errorf("empty init state")
 	}
-	hash, err := state.Code.Value.Value.HashString()
+	codeHash, err := state.Code.Value.Value.HashString()
 	if err != nil {
 		return nil, err
 	}
-	version, prs := knownHashes[hash]
+	version, prs := knownHashes[codeHash]
 	if !prs {
 		return nil, err
 	}
-	var pubKey tongo.Hash
+	var pubKey tlb.Bits256
 	switch version {
 	case wallet.V1R1, wallet.V1R2, wallet.V1R3, wallet.V2R1, wallet.V2R2:
 		var data wallet.DataV1V2

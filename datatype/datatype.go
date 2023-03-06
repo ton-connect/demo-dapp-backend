@@ -40,12 +40,6 @@ type AccountInfo struct {
 		NonBounceable string `json:"non_bounceable"`
 		Raw           string `json:"raw"`
 	} `json:"address"`
-	Balance      int64    `json:"balance"`
-	Icon         *string  `json:"icon,omitempty"`
-	Interfaces   []string `json:"interfaces"`
-	IsScam       bool     `json:"is_scam"`
-	LastUpdate   int64    `json:"last_update"`
-	MemoRequired bool     `json:"memo_required"`
-	Name         *string  `json:"name,omitempty"`
-	Status       string   `json:"status"`
+	Balance int64  `json:"balance"`
+	Status  string `json:"status"`
 }

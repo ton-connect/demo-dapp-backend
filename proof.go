@@ -5,8 +5,8 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
-	"strconv"
-	"strings"
+	"github.com/tonkeeper/tongo"
+	"github.com/tonkeeper/tongo/liteapi"
 	"time"
 
 	"encoding/base64"
@@ -30,24 +30,12 @@ func SignatureVerify(pubkey ed25519.PublicKey, message, signature []byte) bool {
 func ConvertTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*datatype.ParsedMessage, error) {
 	log := log.WithContext(ctx).WithField("prefix", "ConverTonProofMessage")
 
-	addr := strings.Split(tp.Address, ":")
-	if len(addr) != 2 {
-		return nil, fmt.Errorf("invalid address param: %v", tp.Address)
+	addr, err := tongo.ParseAccountID(tp.Address)
+	if err != nil {
+		return nil, err
 	}
 
 	var parsedMessage datatype.ParsedMessage
-
-	workchain, err := strconv.ParseInt(addr[0], 10, 32)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-
-	walletAddr, err := hex.DecodeString(addr[1])
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
 
 	sig, err := base64.StdEncoding.DecodeString(tp.Proof.Signature)
 	if err != nil {
@@ -55,8 +43,8 @@ func ConvertTonProofMessage(ctx context.Context, tp *datatype.TonProof) (*dataty
 		return nil, err
 	}
 
-	parsedMessage.Workchain = int32(workchain)
-	parsedMessage.Address = walletAddr
+	parsedMessage.Workchain = addr.Workchain
+	parsedMessage.Address = addr.Address[:]
 	parsedMessage.Domain = tp.Proof.Domain
 	parsedMessage.Timstamp = tp.Proof.Timestamp
 	parsedMessage.Signature = sig
@@ -91,7 +79,7 @@ func CreateMessage(ctx context.Context, message *datatype.ParsedMessage) ([]byte
 	return res[:], nil
 }
 
-func CheckProof(ctx context.Context, address, net string, tonProofReq *datatype.ParsedMessage) (bool, error) {
+func CheckProof(ctx context.Context, address tongo.AccountID, net *liteapi.Client, tonProofReq *datatype.ParsedMessage) (bool, error) {
 	log := log.WithContext(ctx).WithField("prefix", "CheckProof")
 	pubKey, err := GetWalletPubKey(ctx, address, net)
 	if err != nil {

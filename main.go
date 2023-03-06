@@ -1,8 +1,9 @@
 package main
 
 import (
-	"crypto/ed25519"
 	"fmt"
+	"github.com/tonkeeper/tongo/liteapi"
+	"time"
 
 	"github.com/tonkeeper/tonproof/config"
 
@@ -24,14 +25,17 @@ func main() {
 		DisablePrintStack: false,
 	}))
 	e.Use(middleware.Logger())
-
-	pub, priv, err := ed25519.GenerateKey(nil)
+	var err error
+	networks["-239"], err = liteapi.NewClientWithDefaultMainnet()
 	if err != nil {
-		log.Fatalf("generate keys error: %v", err)
-		return
+		log.Fatal(err)
+	}
+	networks["-3"], err = liteapi.NewClientWithDefaultTestnet()
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	h := newHandler(pub, priv)
+	h := newHandler(config.Proof.PayloadSignatureKey, time.Duration(config.Proof.ProofLifeTimeSec)*time.Second)
 
 	registerHandlers(e, h)
 
