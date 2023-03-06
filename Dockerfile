@@ -9,7 +9,7 @@ RUN go build -o /tmp/tonproof github.com/tonkeeper/tonproof
 
 FROM ubuntu AS tonproof
 RUN apt-get update && \
-    apt-get install -y openssl ca-certificates && \
+    apt-get install -y openssl ca-certificates
 COPY --from=gobuild /tmp/tonproof /app/tonproof
 CMD ["/app/tonproof"]
 
