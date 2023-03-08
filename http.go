@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tonkeeper/tonproof/config"
 )
 
 func registerHandlers(e *echo.Echo, h *handler) {
@@ -22,7 +23,7 @@ func registerHandlers(e *echo.Echo, h *handler) {
 		AllowMethods: []string{echo.GET},
 	}), middleware.JWTWithConfig(middleware.JWTConfig{
 		Claims:     &jwtCustomClaims{},
-		SigningKey: []byte("secret"),
+		SigningKey: []byte(config.Proof.PayloadSignatureKey),
 	}))
 
 }
