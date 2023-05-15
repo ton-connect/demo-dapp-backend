@@ -87,7 +87,9 @@ func CheckProof(ctx context.Context, address tongo.AccountID, net *liteapi.Clien
 			log.Errorf("get wallet address error: %v", err)
 			return false, err
 		}
-
+		if ok, err := CompareStateInitWithAddress(address, tonProofReq.StateInit); err != nil || !ok {
+			return ok, err
+		}
 		pubKey, err = ParseStateInit(tonProofReq.StateInit)
 		if err != nil {
 			log.Errorf("parse wallet state init error: %v", err)
