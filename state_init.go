@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+
 	"github.com/tonkeeper/tongo"
 	"github.com/tonkeeper/tongo/boc"
 	"github.com/tonkeeper/tongo/tlb"
@@ -38,7 +39,7 @@ func ParseStateInit(stateInit string) ([]byte, error) {
 	}
 	version, prs := knownHashes[codeHash]
 	if !prs {
-		return nil, err
+		return nil, fmt.Errorf("unknown code hash")
 	}
 	var pubKey tlb.Bits256
 	switch version {
