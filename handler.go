@@ -61,7 +61,7 @@ func (h *handler) ProofHandler(c echo.Context) error {
 		return c.JSON(HttpResErrorWithLog(fmt.Sprintf("undefined network: %v", tp.Network), http.StatusBadRequest, log))
 	}
 	addr, err := tongo.ParseAccountID(tp.Address)
-	if net == nil {
+	if err != nil {
 		return c.JSON(HttpResErrorWithLog(fmt.Sprintf("invalid account: %v", tp.Address), http.StatusBadRequest, log))
 	}
 	check, err := CheckProof(ctx, addr, net, parsed)
