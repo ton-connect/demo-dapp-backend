@@ -15,17 +15,16 @@ response:
 See the [frontend SDK](https://github.com/ton-connect/sdk/tree/main/packages/sdk) for more details.
 
 3. User approves connection and client receives signed payload with additional prefixes.
-4. Client sends signed result to the backend. Backend checks correctnes of the all prefixes and signature correctness and returns auth token:
+4. Client sends signed result to the backend. Backend checks correctness of the all prefixes and signature correctness and returns auth token:
 ```
 <host>/ton-proof/checkProof
 {
   "address": "0:f63660ff947e5fe6ed4a8f729f1b24ef859497d0483aaa9d9ae48414297c4e1b", // user's address
-  "network": "-239", // "-239" for mainnet and "-1" for testnet
+  "network": "-239", // "-239" for mainnet and "-3" for testnet
   "proof": {
-      "timestamp": 1668094767, // unix epoch seconds
+        "timestamp": 1668094767, // unix epoch seconds
     "domain": {
-     "lengthBytes": 21,
-      "value": "ton-connect.github.io"
+        "value": "ton-connect.github.io"
     },
     "signature": "28tWSg8RDB3P/iIYupySINq1o3F5xLodndzNFHOtdi16Z+MuII8LAPnHLT3E6WTB27//qY4psU5Rf5/aJaIIAA==",
     "payload": "E5B4ARS6CdOI2b5e1jz0jnS-x-a3DgfNXprrg_3pec0=" // payload from the step 1.

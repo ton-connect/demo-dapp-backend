@@ -23,7 +23,7 @@ func registerHandlers(e *echo.Echo, h *handler) {
 		AllowMethods: []string{echo.GET},
 	}), middleware.JWTWithConfig(middleware.JWTConfig{
 		Claims:     &jwtCustomClaims{},
-		SigningKey: []byte(config.Proof.PayloadSignatureKey),
+		SigningKey: []byte(config.Config.Proof.PayloadSignatureKey),
 	}))
 
 }
